@@ -1,0 +1,56 @@
+# SnapVault — HARDENED stack
+# Same app, every finding closed.
+
+services:
+  minio:
+    image: insectai/minio:latest
+    command: server /data --console-address ":9001"
+    # FIX 4: strong unique credentials, supplied from an untracked .env (never committed).
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    # FIX 5: MinIO stays on the internal network only. No host port for the S3 API.
+    expose: ["9000", "9001"]
+    networks: [snapnet]
+    security_opt: ["no-new-privileges:true"]
+
+  minio-init:
+    image: insectai/minio:latest
+    depends_on: [minio]
+    entrypoint: ["/bin/sh", "/init/init-bucket.sh"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      APP_ACCESS_KEY: ${APP_ACCESS_KEY}
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+    volumes:
+      - ./init:/init:ro
+    networks: [snapnet]
+
+  app:
+    build: ./app
+    depends_on: [minio]
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      # FIX 4: the app uses a scoped, least-privilege service account -- not root keys.
+      MINIO_ACCESS_KEY: ${APP_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${APP_SECRET_KEY}
+      MINIO_BUCKET: snapvault
+      APP_ADMIN_USER: ${APP_ADMIN_USER}
+      APP_ADMIN_PASS_HASH: ${APP_ADMIN_PASS_HASH}
+    ports:
+      - "127.0.0.1:8081:8080"   # host 8081 so it runs alongside the vulnerable stack (8080)
+    networks: [snapnet]
+    # FIX 3: drop root and lock the container down.
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/apache2
+      - /var/log/apache2
+      - /home/app/.mc
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  snapnet:

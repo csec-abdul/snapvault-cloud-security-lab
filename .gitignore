@@ -1,0 +1,16 @@
+# Secrets — never commit real credentials. Copy the provided .env.example files to .env.
+.env
+**/.env
+secrets/*.txt
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Build / runtime
+uploads/
+data/
+*.log
